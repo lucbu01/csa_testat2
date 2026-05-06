@@ -106,9 +106,9 @@ public class Drive : ComDevice {
     /// </summary>
     public void Stop() {
         this.stop = true;
-        this.wh.Set();
         string msg = SetRequest("100000000");
         response = string.Concat(response, msg + "...Stop\n");
+        this.wh.Set();
     }
 
     /// <summary>

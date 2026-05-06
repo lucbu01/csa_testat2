@@ -5,125 +5,149 @@
 //   /____/\__,_/_/ /_/ /_/\____/  /_/ |_|\____/_.___/\____/\__/
 //   (c) Hochschule Luzern T&A ========== www.hslu.ch ============
 //
-using System;
+
 using System.Globalization;
-using System.IO.Ports;
-using System.Security.Cryptography;
 
 namespace ZumoLib;
 
-public class Drive : ComDevice {
-    private event EventHandler DriveFinished;
-    private EventWaitHandle wh = new AutoResetEvent(false);
-    private string response = "start";
-    private bool stop = false;
+public class Drive : ComDevice
+{
+    private readonly object locker = new();
+    private readonly EventWaitHandle wh = new AutoResetEvent(false);
+    private bool stop;
 
-    public Drive(ICom com) : base(com, 0x24) {
+    public Drive(ICom com) : base(com, 0x24)
+    {
         TurnCalib(115); // 100 entspricht keine Korrektur (=1.00)
     }
 
-    public string Response { get => response; set => response = value; }
+    public string Response { get; set; } = "start";
+    private event EventHandler DriveFinished;
 
     /// <summary>
-    /// Fährt eine Strecke gerade aus und wartet bis die Fahrt fertig ist.
+    ///     Fährt eine Strecke gerade aus und wartet bis die Fahrt fertig ist.
     /// </summary>
     /// <param name="length">die zu fahrende Strecke in mm (negativer Wert => rückwärts)</param>
     /// <param name="speed"></param>
     /// <param name="acceleration"></param>
     /// <param name="offset">Korrekturfaktor in 0.1mm/s</param>
-    public void Track(Int16 length, UInt16 speed, UInt16 acceleration, sbyte offset = 0) {
-        if (!this.stop) {
-            string msg = SetRequest($"C{length:X4}{speed:X4}{acceleration:X4}{offset:X2}");
-            response = string.Concat(response, msg + "\n");
-            this.wh.WaitOne();
+    public void Track(short length, ushort speed, ushort acceleration, sbyte offset = 0)
+    {
+        lock (locker)
+        {
+            if (stop)
+                return;
+            var msg = SetRequest($"C{length:X4}{speed:X4}{acceleration:X4}{offset:X2}");
+            Response = string.Concat(Response, msg + "\n");
         }
+
+        wh.WaitOne();
     }
 
     /// <summary>
-    ///  Dreht an Ort und Stelle und wartet bis das Drehen fertig ist.
+    ///     Dreht an Ort und Stelle und wartet bis das Drehen fertig ist.
     /// </summary>
     /// <param name="angle"></param>
     /// <param name="speed"></param>
     /// <param name="acceleration"></param>
-    public void Turn(Int16 angle, UInt16 speed, UInt16 acceleration) {
-        if (!this.stop) {
-            string msg = SetRequest($"A{angle:X4}{speed:X4}{acceleration:X4}");
-            response = string.Concat(response, msg + "\n");
-            this.wh.WaitOne();
+    public void Turn(short angle, ushort speed, ushort acceleration)
+    {
+        lock (locker)
+        {
+            if (stop) return;
+            var msg = SetRequest($"A{angle:X4}{speed:X4}{acceleration:X4}");
+            Response = string.Concat(Response, msg + "\n");
         }
+
+        wh.WaitOne();
     }
 
     /// <summary>
-    ///  Dreht an Ort und Stelle und wartet bis das Drehen fertig ist.
+    ///     Dreht an Ort und Stelle und wartet bis das Drehen fertig ist.
     /// </summary>
     /// <param name="angle"></param>
     /// <param name="speed"></param>
     /// <param name="acceleration"></param>
     /// <param name="factor">Korrekturfaktor Istwinkel zu Sollwinkel</param>
-    public void Turn(Int16 angle, UInt16 speed, UInt16 acceleration, Int16 factor) {
-        if (!this.stop) {
-            string msg = SetRequest($"B{factor:X4}");
+    public void Turn(short angle, ushort speed, ushort acceleration, short factor)
+    {
+        lock (locker)
+        {
+            if (stop) return;
+            var msg = SetRequest($"B{factor:X4}");
             msg = SetRequest($"A{angle:X4}{speed:X4}{acceleration:X4}");
-            response = string.Concat(response, msg + "\n");
-            this.wh.WaitOne();
+            Response = string.Concat(Response, msg + "\n");
         }
+
+        wh.WaitOne();
     }
 
     /// <summary>
-    /// Setzt den Korrekturfaktor für den Fahrbefehl "An Ort drehen".
-    /// 100 entspricht 1.00,
-    /// 115 entspricht beispielweise einem Korrekturfaktor von 1.15 (Istwinkel zu Sollwinkel)
+    ///     Setzt den Korrekturfaktor für den Fahrbefehl "An Ort drehen".
+    ///     100 entspricht 1.00,
+    ///     115 entspricht beispielweise einem Korrekturfaktor von 1.15 (Istwinkel zu Sollwinkel)
     /// </summary>
     /// <param name="factor">Korrekturfaktor Istwinkel zu Sollwinkel</param>
-    public void TurnCalib(Int16 factor) {
-        string msg = SetRequest($"B{factor:X4}");
-        response = string.Concat(response, msg + "\n");
+    public void TurnCalib(short factor)
+    {
+        var msg = SetRequest($"B{factor:X4}");
+        Response = string.Concat(Response, msg + "\n");
     }
 
     /// <summary>
-    /// Liefert die restliche Distanz zurück, bis der Zumo anhält (Fahrbefehl fertig ist)
+    ///     Liefert die restliche Distanz zurück, bis der Zumo anhält (Fahrbefehl fertig ist)
     /// </summary>
     /// <returns>Die Distanz in mm</returns>
-    public int GetRemainingDistance() {
-        string msg = GetRequest("2");
-        int dist = int.Parse(msg.Substring(4), NumberStyles.HexNumber);
-        response = string.Concat(response, msg + "\n");
+    public int GetRemainingDistance()
+    {
+        var msg = GetRequest("2");
+        var dist = int.Parse(msg.Substring(4), NumberStyles.HexNumber);
+        Response = string.Concat(Response, msg + "\n");
         return dist;
     }
 
     /// <summary>
-    /// Liefert True zurück, solange ein Fahrbefehl ausgeführt wird
+    ///     Liefert True zurück, solange ein Fahrbefehl ausgeführt wird
     /// </summary>
     /// <returns>true solange der Zumo fährt</returns>
-    public bool IsRunning() {
-        string msg = GetRequest("7");
-        bool running = byte.Parse(msg.Substring(4), NumberStyles.HexNumber) == 1;
+    public bool IsRunning()
+    {
+        var msg = GetRequest("7");
+        var running = byte.Parse(msg.Substring(4), NumberStyles.HexNumber) == 1;
         return running;
     }
 
     /// <summary>
-    ///  Stoppt die Fahrt.
+    ///     Stoppt die Fahrt.
     /// </summary>
-    public void Stop() {
-        this.stop = true;
-        string msg = SetRequest("100000000");
-        response = string.Concat(response, msg + "...Stop\n");
-        this.wh.Set();
+    public void Stop()
+    {
+        lock (locker)
+        {
+            stop = true;
+            var msg = SetRequest("100000000");
+            Response = string.Concat(Response, msg + "...Stop\n");
+            wh.Set();
+        }
     }
 
     /// <summary>
-    ///  Gibt die Fahrt wieder frei.
+    ///     Gibt die Fahrt wieder frei.
     /// </summary>
-    public void ResetStop() {
-        this.stop = false;
+    public void ResetStop()
+    {
+        stop = false;
     }
 
-    protected override bool ProcessEvent(string message) {
-        if (message == "5!24FF") {
+    protected override bool ProcessEvent(string message)
+    {
+        if (message == "5!24FF")
+        {
             DriveFinished?.Invoke(this, EventArgs.Empty);
-            this.wh.Set();
+            wh.Set();
             return true;
         }
+
         return false;
     }
 }

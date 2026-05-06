@@ -6,12 +6,9 @@ namespace ZumoApp {
         static void Main() {
             try
             {
-                ZumoLidar.On();
                 while (!finished)
                 {
                     Console.WriteLine("Press A or B or C and <Enter> to start...");
-                    ZumoDrives.ResetStop();
-                    ZumoLidar.LookAt(400);
                     string choise = Console.ReadLine();
                     string response = "wrong choise";
                     switch (choise.ToUpper())
@@ -30,7 +27,6 @@ namespace ZumoApp {
                             response = "Exit";
                             break;
                     }
-                    ZumoLidar.StopLookAt();
                     Console.WriteLine(response);
                     if (response != "Exit") ZumoProtocol.Write(response);
                 }

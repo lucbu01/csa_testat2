@@ -1,25 +1,40 @@
 using System.Net.Sockets;
 using System.IO;
+using System.Net;
 
 namespace SimpleHttpServer {
 
-    public class HttpHandler {
+    public class HttpHandler(HttpListenerContext client)
+    {
+        public async Task Do() {
+            var filePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".zumo", "protocol.txt");
+            try
+            {
+                if (!File.Exists(filePath))
+                {
+                    client.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                    client.Response.StatusDescription = "File not found";
+                    client.Response.Close();
+                    return;
 
-        private TcpClient client;
+                }
 
-        public HttpHandler(TcpClient client) {
-            this.client = client;
-        }
+                var fileBytes = await File.ReadAllBytesAsync(filePath);
 
-        public void Do() {
-            StreamReader sr = new StreamReader(client.GetStream());
-            StreamWriter sw = new StreamWriter(client.GetStream());
-            Console.WriteLine("Verbindung zu " + client.Client.RemoteEndPoint);
-            // Datei lesen
+                client.Response.ContentType = "text/plain";
+                client.Response.ContentLength64 = fileBytes.Length;
 
-            // Datei im HTTP-Format senden
-
-            client.Close();
+                await client.Response.OutputStream.WriteAsync(fileBytes);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Fehler: {ex.Message}");
+                client.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+            }
+            finally
+            {
+                client.Response.Close();
+            }
         }
     }
 }

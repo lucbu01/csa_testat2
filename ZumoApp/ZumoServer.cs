@@ -6,8 +6,6 @@ namespace ZumoApp;
 
 public class ZumoServer
 {
-    private static bool finished;
-
     private static async Task Main()
     {
         var listener = new TcpListener(IPAddress.Any, 8888);
@@ -41,6 +39,7 @@ public class ZumoServer
             {
                 writer.NewLine = "\r\n";
                 writer.WriteLine("Welcome to Zumo, select your drive:");
+                var finished = false;
                 while (!finished)
                 {
                     writer.WriteLine("Press A or B or C and <Enter> to start or \"Exit\" to leave...");

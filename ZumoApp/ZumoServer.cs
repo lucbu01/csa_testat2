@@ -12,14 +12,14 @@ public class ZumoServer
     {
         var listener = new TcpListener(IPAddress.Any, 8888);
         listener.Start();
-        Console.WriteLine($"Telnet-Server lauscht auf Port {8888}...");
+        Console.WriteLine($"Telnet-Server is listening on port {8888}...");
 
         try
         {
             while (true)
             {
                 var client = await listener.AcceptTcpClientAsync();
-                Console.WriteLine($"[{client.Client.RemoteEndPoint}] Client verbunden!");
+                Console.WriteLine($"[{client.Client.RemoteEndPoint}] client connected!");
 
                 HandleTelnetCommand(client);
             }
@@ -39,10 +39,10 @@ public class ZumoServer
         {
             try
             {
+                writer.NewLine = "\r\n";
                 writer.WriteLine("Welcome to Zumo, select your drive:");
                 while (!finished)
                 {
-                    writer.NewLine = "\r\n";
                     writer.WriteLine("Press A or B or C and <Enter> to start or \"Exit\" to leave...");
                     var choise = reader.ReadLine();
                     var response = "wrong choise";

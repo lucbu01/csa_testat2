@@ -1,40 +1,46 @@
-using System.Net.Sockets;
-using System.IO;
 using System.Net;
 
-namespace SimpleHttpServer {
+namespace SimpleHttpServer;
 
-    public class HttpHandler(HttpListenerContext client)
+public class HttpHandler(HttpListenerContext client)
+{
+    public void Do(object state)
     {
-        public async Task Do() {
-            var filePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".zumo", "protocol.txt");
-            try
+        var filePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".zumo",
+            "protocol.txt");
+        try
+        {
+            if (client.Request.HttpMethod != "GET")
             {
-                if (!File.Exists(filePath))
-                {
-                    client.Response.StatusCode = (int)HttpStatusCode.NotFound;
-                    client.Response.StatusDescription = "File not found";
-                    client.Response.Close();
-                    return;
-
-                }
-
-                var fileBytes = await File.ReadAllBytesAsync(filePath);
-
-                client.Response.ContentType = "text/plain";
-                client.Response.ContentLength64 = fileBytes.Length;
-
-                await client.Response.OutputStream.WriteAsync(fileBytes);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Fehler: {ex.Message}");
-                client.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
-            }
-            finally
-            {
+                client.Response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
+                client.Response.StatusDescription = "Method not allowed";
                 client.Response.Close();
+                return;
             }
+
+            if (!File.Exists(filePath) || client.Request.RawUrl != "/")
+            {
+                client.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                client.Response.StatusDescription = "File not found";
+                client.Response.Close();
+                return;
+            }
+
+            var fileBytes = File.ReadAllBytes(filePath);
+
+            client.Response.ContentType = "text/plain";
+            client.Response.ContentLength64 = fileBytes.Length;
+
+            client.Response.OutputStream.Write(fileBytes);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+            client.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+        }
+        finally
+        {
+            client.Response.Close();
         }
     }
 }
